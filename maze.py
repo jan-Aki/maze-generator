@@ -25,7 +25,7 @@ class Maze:
 		self.cells  = [[0 for x in range(width)] for y in range(height)]
 		self.expandables = []
 
-	# prints the pathway to the terminal
+	# prints the pathways to the terminal
 	def Print(self):
 		for y in range(self.height):
 			line = ''
