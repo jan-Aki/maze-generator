@@ -243,8 +243,8 @@ def HAK(maze):
 
 
 
-sidelength = 3
-dimension  = 12
+sidelength = 4
+dimension  = 4
 
 maze = Maze([sidelength for _ in range(dimension)])
 HAK(maze)
