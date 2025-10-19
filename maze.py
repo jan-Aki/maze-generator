@@ -1,217 +1,191 @@
+import numpy as np
 import png
 import random
-
-
-# width and height of the maze
-width  = 100
-height = 100
-
-# controls the width of the halls
-mazeScale = 6
-# scales the image so it's a reasonable size
-imageScale = 1
 
 
 
 
 
 class Maze:
-	def __init__(self, width, height):
-		self.width  = width
-		self.height = height
-		# the first bit represents being connected to the cell to the right of it
-		# the second, the cell above it
-		# the third, left, and the fourth, down
-		self.cells  = [[0 for x in range(width)] for y in range(height)]
-		self.expandables = []
+	def __init__(self, size):
+		self.dimension = len(size)
 
-	# prints the pathways to the terminal
-	def Print(self):
-		for y in range(self.height):
-			line = ''
-			for x in range(self.width):
-				match self.cells[y][x]:
-					case 0:
-						line+='\u2588'
-					case 1:
-						line+='\u2576'
-					case 2:
-						line+='\u2577'
-					case 3:
-						line+='\u250C'
-					case 4:
-						line+='\u2574'
-					case 5:
-						line+='\u2500'
-					case 6:
-						line+='\u2510'
-					case 7:
-						line+='\u252C'
-					case 8:
-						line+='\u2575'
-					case 9:
-						line+='\u2514'
-					case 10:
-						line+='\u2502'
-					case 11:
-						line+='\u251C'
-					case 12:
-						line+='\u2518'
-					case 13:
-						line+='\u2534'
-					case 14:
-						line+='\u2524'
-					case 15:
-						line+='\u253C'
-			print(line)
+		self.size = 1
+		for length in size:
+			self.size*=length
 
-	# prints the numbers in the array
-	def PrintNumbers(self):
-		for y in range(self.height):
-			print(self.cells[y])
+		size.append(self.dimension) # for connections
+		self.cells = np.zeros(size, int)
 
-	def AddConnection(self, x, y, direction):
-		self.cells[y][x] |= direction
-		match direction:
-			case 1:
-				if x+1!=self.width:
-					self.cells[y][x+1] |= 4
-			case 2:
-				if y+1!=self.height:
-					self.cells[y+1][x] |= 8
-			case 4:
-				if x!=0:
-					self.cells[y][x-1] |= 1
-			case 8:
-				if y!=0:
-					self.cells[y-1][x] |= 2
-			case _:
-				print('unhandled direction')
+		self.visitedCells = []
+		self.origin = tuple([0 for _ in range(self.dimension)])
 
-	def RemoveConnection(self, x, y, direction):
-		self.cells[y][x] ^= direction
-		match direction:
-			case 1:
-				if x+1!=self.width:
-					self.cells[y][x+1] ^= 4
-			case 2:
-				if y+1!=self.height:
-					self.cells[y+1][x] ^= 8
-			case 4:
-				if x!=0:
-					self.cells[y][x-1] ^= 1
-			case 8:
-				if y!=0:
-					self.cells[y-1][x] ^= 2
-			case _:
-				print('unhandled direction')
-
-	def GetDirections(self, x, y):
+	def CellInDirection(self, cell, direction):
+		# first bit is forwards in that dimension
+		# second is backwards in that dimension
 		output = []
-		if x+1!=self.width:
-			output.append(1)
-		if y+1!=self.height:
-			output.append(2)
-		if y>0:
-			output.append(8)
-		if x>0:
-			output.append(4)
+		for c, d in zip(cell, direction):
+			match d:
+				case 0:
+					output.append(c)
+				case 1:
+					output.append(c+1)
+				case 2:
+					output.append(c-1)
+				case _:
+					print(f"unhandled direction {d}")
+		return tuple(output)
+
+	def AddConnection(self, cell, direction):
+		def NegateTuple(tup):
+			output = []
+			for t in tup:
+				match t:
+					case 0:
+						output.append(0)
+					case 1:
+						output.append(2)
+					case 2:
+						output.append(1)
+					case _:
+						print(f"tried to negate {t}")
+			return tuple(output)
+		
+		connectingTo = self.CellInDirection(cell, direction)
+		self.cells[cell] |= direction
+		self.cells[connectingTo] |= NegateTuple(direction)
+		if cell not in self.visitedCells:
+			self.visitedCells.append(cell)
+		if connectingTo not in self.visitedCells:
+			self.visitedCells.append(connectingTo)
+	
+	def RemoveConnection(self, cell, direction):
+		def NegateTuple(tup):
+			output = []
+			for t in tup:
+				match t:
+					case 0:
+						output.append(0)
+					case 1:
+						output.append(2)
+					case 2:
+						output.append(1)
+					case _:
+						print(f"tried to negate {t}")
+			return tuple(output)
+		
+		connectingTo = self.CellInDirection(cell, direction)
+		self.cells[cell] ^= direction
+		self.cells[connectingTo] ^= NegateTuple(direction)
+		if self.cells[cell]==tuple([0 for _ in range(self.dimension)]):
+			self.visitedCells.remove(cell)
+		if self.cells[connectingTo]==tuple([0 for _ in range(self.dimension)]):
+			self.visitedCells.remove(connectingTo)
+		
+	def AlreadyVisited(self, cell):
+		for direction in self.cells[cell]:
+			if direction>0:
+				return True
+		return False
+	
+	def GetDirections(self, cell):
+		def CellInGrid(cell):
+			for i in range(self.dimension):
+				if cell[i]<0 or cell[i]>=self.cells.shape[i]:
+					return False
+			return True
+
+		output = []
+		for d in range(self.dimension):
+			forwards = tuple([0 for _ in range(d)]) + tuple([1]) + tuple([0 for _ in range(self.dimension-d-1)])
+			backwards = tuple([0 for _ in range(d)]) + tuple([2]) + tuple([0 for _ in range(self.dimension-d-1)])
+			fwCell = self.CellInDirection(cell, forwards)
+			bwCell = self.CellInDirection(cell, backwards)
+			if CellInGrid(fwCell):
+				output.append(forwards)
+			if CellInGrid(bwCell):
+				output.append(backwards)
 		return output
 
-	def CellInDirection(self, x, y, direction):
-		match direction:
-			case 1:
-				return [x+1, y]
-			case 2:
-				return [x, y+1]
-			case 4:
-				return [x-1, y]
-			case 8:
-				return [x, y-1]
-			case _:
-				print('unhandled direction')
-
-	def GetAvailableDirections(self, x, y):
-		directions = self.GetDirections(x, y)
+	def GetAvailableDirections(self, cell):
+		directions = self.GetDirections(cell)
 		output = []
 		for direction in directions:
-			neighbourX, neighbourY = self.CellInDirection(x, y, direction)
-			if self.cells[neighbourY][neighbourX]==0:
+			neighbour = self.CellInDirection(cell, direction)
+			if not self.AlreadyVisited(neighbour):
 				output.append(direction)
 		return output
 
-	def GetVisitedCells(self):
-		output = []
-		for y in range(self.height):
-			for x in range(self.width):
-				if self.cells[y][x]!=0:
-					output.append([x, y])
-		return output
-
-	def RandomConnection(self, x, y):
-		directions = self.GetAvailableDirections(x, y)
-		if len(directions)>=0:
+	def RandomConnection(self, cell):
+		directions = self.GetAvailableDirections(cell)
+		if len(directions)>0:
 			direction = random.choice(directions)
-			self.AddConnection(x, y, direction)
+			self.AddConnection(cell, direction)
 
 
 
-def SaveImage(image, palette, name):
-	width    = len(image[0])
-	height   = len(image)
+def MazeToPNG(maze, mazeScale, imageScale):
+	if maze.dimension!=2:
+		print('Can only make PNGs of 2d mazes')
+		return
 
-	w = png.Writer(size=(width, height), palette=palette, bitdepth=8)
-	with open(name+'.png', "wb") as f:
-		w.write(f, image)
+	def SaveImage(image, palette, name):
+		width    = len(image[0])
+		height   = len(image)
 
-
-
-def CreateGrid(image):
-	height = len(image)
-	width  = len(image[0])
-
-	for y in range(height):
-		for x in range(width):
-			if x%mazeScale==0 or y%mazeScale==0:
-				image[y][x] = 0
+		w = png.Writer(size=(width, height), palette=palette, bitdepth=8)
+		with open(name+'.png', "wb") as f:
+			w.write(f, image)
 
 
 
-def ScaleImage(image, scale):
-	height = len(image)
-	width  = len(image[0])
+	def CreateGrid(image):
+		height = len(image)
+		width  = len(image[0])
 
-	scaledImage = []
-	for y in image:
-		scaledRow = []
-		for x in y:
+		for y in range(height):
+			for x in range(width):
+				if x%mazeScale==0 or y%mazeScale==0:
+					image[y][x] = 0
+
+
+
+	def ScaleImage(image, scale):
+		height = len(image)
+		width  = len(image[0])
+
+		scaledImage = []
+		for y in image:
+			scaledRow = []
+			for x in y:
+				for i in range(scale):
+					scaledRow.append(x)
 			for i in range(scale):
-				scaledRow.append(x)
-		for i in range(scale):
-			scaledImage.append(scaledRow)
-	return scaledImage
+				scaledImage.append(scaledRow)
+		return scaledImage
 
 
+	width  = len(maze.cells[0])
+	height = len(maze.cells)
 
-def MazeToImage(maze):
 	image   = [[1 for x in range(mazeScale*width+1)] for y in range(mazeScale*height+1)]
 	CreateGrid(image)
 
 	for y in range(height):
 		for x in range(width):
-			if maze.cells[y][x] & 1  !=  0:
+			if maze.cells[y][x][1] in [1, 3]:
 				for i in range(mazeScale-1):
 					image[mazeScale*y+1 + i][mazeScale*x+mazeScale] = 1
 
-			if maze.cells[y][x] & 2  !=  0:
+			if maze.cells[y][x][0] in [1, 3] :
 				for i in range(mazeScale-1):
 					image[mazeScale*y+mazeScale][mazeScale*x+1 + i] = 1
 
-			if maze.cells[y][x] & 4  !=  0:
+			if maze.cells[y][x][1] in [2, 3]:
 				for i in range(mazeScale-1):
 					image[mazeScale*y+1 + i][mazeScale*x] = 1
 
-			if maze.cells[y][x] & 8  !=  0:
+			if maze.cells[y][x][0] in [2, 3]:
 				for i in range(mazeScale-1):
 					image[mazeScale*y][mazeScale*x+1 + i] = 1
 
@@ -234,99 +208,45 @@ def MazeToImage(maze):
 
 
 
-def Prim(maze):
-	startX = width//2
-	startY = height//2
-	directions = random.choice(maze.GetAvailableDirections(startX, startY))
-	maze.AddConnection(startX, startY, directions)
-	edges = maze.GetVisitedCells()
-
-	while len(edges)!=0:
-		x, y = random.choice(edges)
-		directions = maze.GetAvailableDirections(x, y)
-		if len(directions)!=0:
-			direction = random.choice(directions)
-
-			if x>y:
-				if 2 in directions:
-					direction = 2
-				elif 1 in directions:
-					direction = 1
-			else:
-				if 1 in directions:
-					direction = 1
-				elif 2 in directions:
-					direction = 2
-
-			maze.AddConnection(x, y, direction)
-			edges.append(maze.CellInDirection(x, y, direction))
-		else:
-			edges.remove([x, y])
+def ChooseBranchDirection(directions):
+	return random.choice(directions)
 
 
 
 def HAK(maze):
-	def FindValidStart():
-		x, y = random.randrange(width), random.randrange(height)
-		while True:
-			if maze.cells[y][x]!=0 and len(maze.GetAvailableDirections(x, y))>0:
-				return [x, y]
+	def FindValidStart(maze, edges):
+		originalEdges = edges
+		for cell in originalEdges:
+			if len(maze.GetAvailableDirections(cell))>0:
+				return [cell, edges]
 			else:
-				x = (x+1)%width
-				if x==0:
-					y = (y+1)%width
+				edges.remove(cell)
+		return [-1, []]
 
-	def Explore(x, y):
-		while len(maze.GetAvailableDirections(x, y))!=0:
-			directions = maze.GetAvailableDirections(x, y)
-			direction  = random.choice(directions)
-			maze.AddConnection(x, y, direction)
-			x, y = maze.CellInDirection(x, y, direction)
+	def Explore(maze, cell, edges):
+		directions = maze.GetAvailableDirections(cell)
+		while len(directions)>0:
+			direction = ChooseBranchDirection(directions)
+			maze.AddConnection(cell, direction)
+			cell = maze.CellInDirection(cell, direction)
+			directions = maze.GetAvailableDirections(cell)
+			if (cell not in edges) and (len(directions)>0):
+				edges.append(cell)
+		return edges
 
-	maze.RandomConnection(width//2, height//2)
-	numberOfCellsVisited = len(maze.GetVisitedCells())
-	while numberOfCellsVisited < width*height:
-		x, y = FindValidStart()
-		Explore(x, y)
-		numberOfCellsVisited = len(maze.GetVisitedCells())
-
-
-
-def LimitedHAK(maze, maxDepth):
-	def FindValidStart():
-		x, y = random.randrange(width), random.randrange(height)
-		while True:
-			if maze.cells[y][x]!=0 and len(maze.GetAvailableDirections(x, y))>0:
-				return [x, y]
-			else:
-				x = (x+1)%width
-				if x==0:
-					y = (y+1)%width
-
-	def Explore(x, y, maxDepth):
-		depth = 0
-		while len(maze.GetAvailableDirections(x, y))!=0 and depth<maxDepth:
-			directions = maze.GetAvailableDirections(x, y)
-			direction  = random.choice(directions)
-			maze.AddConnection(x, y, direction)
-			x, y = maze.CellInDirection(x, y, direction)
-			depth+=1
-
-	maze.RandomConnection(width//2, height//2)
-	numberOfCellsVisited = len(maze.GetVisitedCells())
-	while numberOfCellsVisited < width*height:
-		x, y = FindValidStart()
-		Explore(x, y, maxDepth)
-		numberOfCellsVisited = len(maze.GetVisitedCells())
+	maze.RandomConnection(maze.origin)
+	edges = [maze.origin]
+	cell, edges = FindValidStart(maze, edges)
+	while len(edges)>0:
+		edges = Explore(maze, cell, edges)
+		cell, edges = FindValidStart(maze, edges)
 
 
 
+sidelength = 3
+dimension  = 12
 
-
-maze = Maze(width, height)
-Prim(maze)
-#HAK(maze)
-#LimitedHAK(maze, 32)
-
-#maze.Print()
-MazeToImage(maze)
+maze = Maze([sidelength for _ in range(dimension)])
+HAK(maze)
+print(maze.cells)
+#MazeToPNG(maze, 6, 2)
